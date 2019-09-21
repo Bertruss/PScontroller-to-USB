@@ -1,10 +1,11 @@
 #include <Joystick.h>
-
 // Adapt a Sony Playstation controller (all-digital variants, such as scph-1010) to USB
 // Intended platform is any atmega32u4 based microcontroller
 // author: Michael Hautman
 //
-// reference: https://gamesx.com/controldata/psxcont/psxcont.htm
+// references: 
+// PS1 interfacing guide : https://gamesx.com/controldata/psxcont/psxcont.htm
+// Joystick library by MHeironimus : https://github.com/MHeironimus/ArduinoJoystickLibrary
 
 //Pin definitions:
 int CLK = 10;
@@ -23,9 +24,18 @@ byte laststate[16] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
 //message contents
 byte rec[24] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; 
 
+Joystick_ Joystick(JOYSTICK_DEFAULT_REPORT_ID,JOYSTICK_TYPE_GAMEPAD,
+  16, 0,                  // Button Count, Hat Switch Count
+  true, true, false,     // X and Y, but no Z Axis
+  false, false, false,   // No Rx, Ry, or Rz
+  false, false,          // No rudder or throttle
+  false, false, false);  // No accelerator, brake, or steering
 
 void setup() {
   Joystick.begin();
+  Joystick.setXAxisRange(-1, 1);
+  Joystick.setYAxisRange(-1, 1);
+  
   pinMode(CLK, OUTPUT);
   pinMode(ATT, OUTPUT);
   pinMode(CMD, OUTPUT);
@@ -93,7 +103,7 @@ void softPSSerial(int msg, int sel){
 }
 
 
-//transmission decode, with 
+//transmission decode, with transmission of typical HID signals for controllers
 void Decode(int type){
      if(type){ //byte 1  
      byte butt;  
@@ -115,12 +125,36 @@ void Decode(int type){
       if(rec[3] != laststate[3])
         Joystick.setButton(9, !rec[3]);
       
-      int dir = -1;
-
-      //conversion necessary for microsoft's 360 degree hat system
-      if(!rec[4] || !rec[5] || !rec[6] || !rec[7]){ //Dpad
+      
+      /* D-Pad to Hat switch conversion 
+       int dir = -1; //dpad released
+       if(!rec[4] || !rec[5] || !rec[6] || !rec[7] ){ //Dpad
         dir = !rec[4]*0 + !rec[5]*90 + !rec[6]*180 + !rec[7]*270 + (-45)*!rec[4]*!rec[5] + (-135)*!rec[5]*!rec[6] + (-225)*!rec[6]*!rec[7] + (45)*!rec[7]*!rec[4];
-      }
-      Joystick.setHatSwitch(0, dir); //reset
+       Serial.println(dir);
+       }
+      Joystick.setHatSwitch(0, dir); 
+      */
+
+      //implementation 3: simple button based d-pad with axis state change for increased compatibility
+    if(rec[4] != laststate[4]){
+        Joystick.setButton(12, !rec[4]);
+        Joystick.setYAxis(-(!rec[4]));
+    }
+    
+    if(rec[6] != laststate[6]){
+        Joystick.setButton(13, !rec[6]);
+        Joystick.setYAxis((!rec[6]));
+    }
+    
+    if(rec[5] != laststate[5]){
+        Joystick.setButton(15, !rec[5]);
+        Joystick.setXAxis((!rec[5]));
+    }
+    
+    if(rec[7] != laststate[7]){
+        Joystick.setButton(14, !rec[7]);
+        Joystick.setXAxis(-(!rec[7]));
+    }
+      
     }
 }
