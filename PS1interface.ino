@@ -6,6 +6,14 @@
 // references: 
 // PS1 interfacing guide : https://gamesx.com/controldata/psxcont/psxcont.htm
 // Joystick library by MHeironimus : https://github.com/MHeironimus/ArduinoJoystickLibrary
+// 
+// note:: logic 0 indicates button activation
+
+// macros for addressing binary data
+#define LS_READ(i) ((laststate & (0x8000 >> i)) >> 15 - i)
+#define R_READ(i) ((rec & (0x800000 >> i)) >> 31 - i)
+#define LS_SET(i,v) v ? laststate |= (0x8000 >> i) : laststate &= ~(0x8000 >> i);
+#define R_SET(i,v) v ? rec|= (0x800000 >> i) : rec &= ~(0x800000 >> i);
 
 //Pin definitions:
 int CLK = 10;
@@ -18,11 +26,12 @@ int DATA = 20;
 //bit 9-16: //triggers/cross/triangle/square/circle
 //bit 17-24: //Data rdy msg, useful for msg fidelity testing
 
+
 //previous state of button activation
-byte laststate[16] = {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1};
+uint16_t laststate = 0xFFFF;
 
 //message contents
-byte rec[24] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}; 
+uint32_t rec = 0xFFFFFF00;
 
 Joystick_ Joystick(JOYSTICK_DEFAULT_REPORT_ID,JOYSTICK_TYPE_GAMEPAD,
   16, 0,                  // Button Count, Hat Switch Count
@@ -49,7 +58,7 @@ void setup() {
 void loop() {
   ComReset();
   delayMicroseconds(100);
-  ComInit();//request data from ocntroller
+  ComInit();//request data from controller
 
   for(int i = 0; i < 2; i++){
       softPSSerial(0xFF, i);
@@ -57,7 +66,7 @@ void loop() {
       }
     Decode(0);//start/select/dpad
     Decode(1);//triggers/cross/triangle/square/circle
-    memcpy(laststate, rec, sizeof(byte)*16);//copys first 2-bytes of current 'rec' for 'laststate' mem
+    memcpy(&laststate, &rec, 2);//copys first 2-bytes of current 'rec' for 'laststate' mem
 }
 
 void ComInit(){
@@ -95,7 +104,7 @@ void softPSSerial(int msg, int sel){
     delayMicroseconds(25);
     digitalWrite(CLK, HIGH);
     if(sel < 3){
-      rec[i+8*sel] = digitalRead(DATA);
+      R_SET(i+8*sel, digitalRead(DATA));
     }
     delayMicroseconds(30);
   }
@@ -103,14 +112,14 @@ void softPSSerial(int msg, int sel){
 }
 
 
-//transmission decode, with transmission of typical HID signals for controllers
+//transmission decode, using typical HID signals for controllers provided by MHieronymous lib
 void Decode(int type){
      if(type){ //byte 1  
      byte butt;  
       for(int i = 8; i < 16; i++){ 
         butt = i - 8;
-        if(rec[i] != laststate[i]){
-          if(!rec[i]){
+        if(R_READ(i) != LS_READ(i)){
+          if(!R_READ(i)){
             Joystick.setButton(butt, 1);
             }
           else{
@@ -119,11 +128,11 @@ void Decode(int type){
           }
         }
     }else{ //byte 0
-      if(rec[0] != laststate[0])
-        Joystick.setButton(8, !rec[0]);
+      if(R_READ(0) != LS_READ(0))
+        Joystick.setButton(8, !R_READ(0));
       
-      if(rec[3] != laststate[3])
-        Joystick.setButton(9, !rec[3]);
+      if(R_READ(3) != LS_READ(3))
+        Joystick.setButton(9, !R_READ(3));
       
       
       /* D-Pad to Hat switch conversion 
@@ -136,24 +145,24 @@ void Decode(int type){
       */
 
       //implementation 3: simple button based d-pad with axis state change for increased compatibility
-    if(rec[4] != laststate[4]){
-        Joystick.setButton(12, !rec[4]);
-        Joystick.setYAxis(-(!rec[4]));
+    if(R_READ(4) != LS_READ(4)){
+        Joystick.setButton(12, !R_READ(4));
+        Joystick.setYAxis(-(!R_READ(4)));
     }
     
-    if(rec[6] != laststate[6]){
-        Joystick.setButton(13, !rec[6]);
-        Joystick.setYAxis((!rec[6]));
+    if(R_READ(6) != LS_READ(6)){
+        Joystick.setButton(13, !R_READ(6));
+        Joystick.setYAxis((!R_READ(6)));
     }
     
-    if(rec[5] != laststate[5]){
-        Joystick.setButton(15, !rec[5]);
-        Joystick.setXAxis((!rec[5]));
+    if(R_READ(5) != LS_READ(5)){
+        Joystick.setButton(15, !R_READ(5));
+        Joystick.setXAxis((!R_READ(5)));
     }
     
-    if(rec[7] != laststate[7]){
-        Joystick.setButton(14, !rec[7]);
-        Joystick.setXAxis(-(!rec[7]));
+    if(R_READ(7) != LS_READ(7)){
+        Joystick.setButton(14, !R_READ(7));
+        Joystick.setXAxis(-(!R_READ(7)));
     }
       
     }
